@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Infinite Galaxy</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+    }
+    
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      outline: none;
+    }
+    
+    .info-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-family: 'Arial', sans-serif;
+      pointer-events: none;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div class="info-overlay">
+    Move cursor to change galaxy rotation
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+  
+  <script>
+    // Main variables
+    let scene, camera, renderer, galaxy;
+    let mouse = {
+      x: 0,
+      y: 0
+    };
+    
+    // Galaxy parameters
+    const params = {
+      count: 50000,
+      size: 0.01,
+      radius: 5,
+      branches: 5,
+      spin: 1,
+      randomness: 0.5,
+      randomnessPower: 3,
+      insideColor: '#ff6030',
+      outsideColor: '#1b3984',
+      rotationSpeed: 0.05
+    };
+    
+    // Initialize the scene
+    function init() {
+      // Create scene
+      scene = new THREE.Scene();
+      
+      // Setup camera
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.z = 4;
+      camera.position.y = 2;
+      camera.lookAt(0, 0, 0);
+      scene.add(camera);
+      
+      // Setup renderer
+      renderer = new THREE.WebGLRenderer({
+        antialias: true
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      document.body.appendChild(renderer.domElement);
+      
+      // Create galaxy
+      createGalaxy();
+      
+      // Handle window resize
+      window.addEventListener('resize', onWindowResize);
+      
+      // Handle mouse movement
+      document.addEventListener('mousemove', onMouseMove);
+      
+      // Animation loop
+      animate();
+    }
+    
+    // Create the galaxy
+    function createGalaxy() {
+      // Remove old galaxy if exists
+      if (galaxy) {
+        scene.remove(galaxy);
+        galaxy.geometry.dispose();
+        galaxy.material.dispose();
+      }
+      
+      // Geometry
+      const geometry = new THREE.BufferGeometry();
+      
+      // Arrays for particle positions and colors
+      const positions = new Float32Array(params.count * 3);
+      const colors = new Float32Array(params.count * 3);
+      
+      // Color objects
+      const insideColor = new THREE.Color(params.insideColor);
+      const outsideColor = new THREE.Color(params.outsideColor);
+      
+      // Generate particles
+      for (let i = 0; i < params.count; i++) {
+        const i3 = i * 3;
+        
+        // Position
+        const radius = Math.random() * params.radius;
+        const spinAngle = radius * params.spin;
+        const branchAngle = (i % params.branches) / params.branches * Math.PI * 2;
+        
+        // Randomness
+        const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
+        const randomY = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
+        const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
+        
+        positions[i3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
+        positions[i3 + 1] = randomY;
+        positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
+        
+        // Color
+        const mixedColor = insideColor.clone();
+        mixedColor.lerp(outsideColor, radius / params.radius);
+        
+        colors[i3] = mixedColor.r;
+        colors[i3 + 1] = mixedColor.g;
+        colors[i3 + 2] = mixedColor.b;
+      }
+      
+      // Set geometry attributes
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      // Material
+      const material = new THREE.PointsMaterial({
+        size: params.size,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true
+      });
+      
+      // Points
+      galaxy = new THREE.Points(geometry, material);
+      scene.add(galaxy);
+    }
+    
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    // Handle mouse movement
+    function onMouseMove(event) {
+      // Calculate normalized mouse position (-1 to 1)
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      
+      // Smooth camera movement with GSAP
+      gsap.to(camera.position, {
+        duration: 2,
+        x: mouse.x * 0.5,
+        y: mouse.y * 0.5 + 2,
+        ease: "power2.out"
+      });
+      
+      // Adjust galaxy rotation based on cursor position
+      gsap.to(galaxy.rotation, {
+        duration: 1.5,
+        x: mouse.y * 0.1,
+        y: mouse.x * 0.1,
+        ease: "power1.out"
+      });
+    }
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Rotate galaxy continuously
+      galaxy.rotation.y += params.rotationSpeed * 0.02;
+      
+      // Zoom effect for infinite feeling
+      const time = Date.now() * 0.0005;
+      camera.position.z = 4 + Math.sin(time) * 0.5;
+      
+      // Render
+      renderer.render(scene, camera);
+    }
+    
+    // Initialize the application
+    init();
+  </script>
+</body>
+</html>
